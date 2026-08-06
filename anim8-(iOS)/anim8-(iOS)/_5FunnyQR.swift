@@ -12,16 +12,9 @@ private struct QRDot: Identifiable {
     let row: Int
     let col: Int
     let color: Color
-    /// How large/close this row appears once the grid revolves into a cylinder —
-    /// rows nearest the centre face the viewer (bigger), rows near the top/bottom edge
-    /// curl away (smaller), like the front of a rotating drum.
-    let depthScale: CGFloat
 }
 
 private func makeFunnyQRDots(gridSize: Int) -> [QRDot] {
-    let centerRow = Double(gridSize - 1) / 2
-    let maxAngle = Double.pi / 2.3
-
     func inFinder(_ r: Int, _ c: Int, originR: Int, originC: Int) -> Bool {
         let rr = r - originR, cc = c - originC
         guard rr >= 0, rr <= 6, cc >= 0, cc <= 6 else { return false }
@@ -49,16 +42,12 @@ private func makeFunnyQRDots(gridSize: Int) -> [QRDot] {
 
     var dots: [QRDot] = []
     for r in 0..<gridSize {
-        let normalizedRow = (Double(r) - centerRow) / centerRow
-        let rowAngle = normalizedRow * maxAngle
-        let depthScale = 0.55 + 0.75 * cos(rowAngle)
-
         for c in 0..<gridSize {
             let onFinder = isFinder(r, c)
             var isOn = onFinder
             if !onFinder && !inQuietZone(r, c) {
                 let hash = r * 928371 + c * 68917 + 12345
-                isOn = (hash % 5) < 2
+                isOn = (hash % 5) < 4
             }
             guard isOn else { continue }
 
@@ -74,7 +63,7 @@ private func makeFunnyQRDots(gridSize: Int) -> [QRDot] {
                 }
             }
 
-            dots.append(QRDot(row: r, col: c, color: color, depthScale: CGFloat(depthScale)))
+            dots.append(QRDot(row: r, col: c, color: color))
         }
     }
     return dots
@@ -96,7 +85,7 @@ private func easeOutCubic(_ x: CGFloat) -> CGFloat {
 }
 
 struct _5FunnyQR: View {
-    private static let gridSize = 21
+    private static let gridSize = 27
     private let dots = makeFunnyQRDots(gridSize: gridSize)
     private let centerRowIndex = gridSize / 2
 
@@ -104,8 +93,10 @@ struct _5FunnyQR: View {
     private let cylinderHold: TimeInterval = 3.0
     private let morphDuration: TimeInterval = 1.1
     private let rowStagger: TimeInterval = 0.02
-    /// Radians per second the drum spins while it's expanded.
-    private let rotationSpeed: CGFloat = .pi / 4
+    /// Radians per second the drum spins while it's expanded (negative = spins left).
+    private let rotationSpeed: CGFloat = -.pi / 4
+    /// The drum leans slightly to the left instead of standing perfectly upright.
+    private let cylinderTiltAngle: CGFloat = -15 * .pi / 180
 
     /// How long the outermost row's staggered morph takes to catch up.
     private var maxRowDelay: TimeInterval { rowStagger * Double(centerRowIndex) }
@@ -166,18 +157,25 @@ struct _5FunnyQR: View {
                         let rowRadiusFactor = waistFactor + (edgeBoost - waistFactor) * pow(abs(normalizedRow), 1.5)
                         let rowDrumRadius = drumRadius * rowRadiusFactor
 
+                        // Tilt the whole drum so it leans slightly to the left
+                        // instead of standing perfectly vertical.
+                        let localX = rowDrumRadius * sin(colAngle)
+                        let localY = normalizedRow * (usableHeight / 2)
+                        let tiltedX = localX * cos(cylinderTiltAngle) - localY * sin(cylinderTiltAngle)
+                        let tiltedY = localX * sin(cylinderTiltAngle) + localY * cos(cylinderTiltAngle)
+
                         let cylinderPoint = CGPoint(
-                            x: center.x + rowDrumRadius * sin(colAngle),
-                            y: center.y + normalizedRow * (usableHeight / 2)
+                            x: center.x + tiltedX,
+                            y: center.y + tiltedY
                         )
 
-                        // Dots swinging round the back shrink and fade, like
-                        // they're receding on the far side of the cylinder.
-                        let colScale = 0.675 + 0.325 * depth
+                        // Dots swinging round the back fade, like they're
+                        // receding on the far side of the cylinder — but every
+                        // circle on the cylinder is the same size.
                         let colOpacity = 0.65 + 0.35 * depth
 
                         let flatSize = cell * 0.62
-                        let expandedSize = baseCircleSize * dot.depthScale * colScale
+                        let expandedSize = baseCircleSize
 
                         let rowDelay = Double(abs(dot.row - centerRowIndex)) * rowStagger
 
