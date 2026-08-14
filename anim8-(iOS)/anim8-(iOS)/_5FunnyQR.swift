@@ -225,7 +225,7 @@ private func layoutFor(
     // edge moves — the waist stays put, so the circles at the pinch keep
     // their spacing and the flare gets deeper rather than the whole tube
     // getting fatter.
-    let edgeBoost: CGFloat = 1.85
+    let edgeBoost: CGFloat = 2.15
     let rowRadiusFactor = waistFactor + (edgeBoost - waistFactor) * pow(abs(normalizedRow), 2)
     let rowDrumRadius = geo.drumRadius * rowRadiusFactor
 
