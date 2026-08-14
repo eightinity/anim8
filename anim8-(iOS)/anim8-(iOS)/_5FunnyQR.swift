@@ -305,6 +305,17 @@ private func layoutFor(
 }
 
 struct _5FunnyQR: View {
+    /// Backdrop, and the colour the top and bottom scrims fade *from*. One
+    /// constant feeds both on purpose: the scrims only read as the drum
+    /// dissolving into nothing if they land on exactly the page colour, and
+    /// this is very nearly white but not actually white — a scrim fading to
+    /// `.white` would leave a lighter band along each edge.
+    private static let backgroundColor = Color(red: 0.96, green: 0.97, blue: 0.98)
+    /// How much of the screen's height each scrim covers. The flared rims are
+    /// the sparsest part of the drum, so fading them is also what stops the
+    /// two ends reading as scattered loose circles.
+    private static let edgeFadeFraction: CGFloat = 0.20
+
     private static let gridSize = 21
     /// The cylinder's uniform lattice. Only `cylRows * cylCols` of the QR's
     /// dots make it onto the drum — the rest fade out as it forms — and with
@@ -463,7 +474,41 @@ struct _5FunnyQR: View {
                 .frame(width: geo.size.width, height: geo.size.height)
             }
         }
-        .background(Color(red: 0.96, green: 0.97, blue: 0.98).ignoresSafeArea())
+        .background(Self.backgroundColor.ignoresSafeArea())
+        // Deliberately an `overlay` rather than another layer in a ZStack:
+        // overlay is sized to the view it sits on and never feeds back into
+        // that view's layout, so the GeometryReader above keeps reporting the
+        // safe-area-inset height the whole drum is measured against. Wrapping
+        // the two in a ZStack and letting them ignore the safe area would grow
+        // the reader to the full screen and quietly resize the drum with it.
+        .overlay {
+            GeometryReader { screen in
+                let fade = screen.size.height * Self.edgeFadeFraction
+                VStack(spacing: 0) {
+                    LinearGradient(
+                        // Fading to the same colour at zero alpha, not to
+                        // `.clear`. `.clear` is transparent *black*, so
+                        // interpolating towards it drags a grey cast through
+                        // the middle of the ramp.
+                        colors: [Self.backgroundColor, Self.backgroundColor.opacity(0)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: fade)
+
+                    Spacer(minLength: 0)
+
+                    LinearGradient(
+                        colors: [Self.backgroundColor.opacity(0), Self.backgroundColor],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: fade)
+                }
+            }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+        }
         .onAppear {
             startDate = Date()
         }
