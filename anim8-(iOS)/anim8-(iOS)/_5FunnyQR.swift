@@ -220,7 +220,12 @@ private func layoutFor(
     // closest — so the flare is opened up by raising the edge alone and
     // leaving the waist where it is.
     let waistFactor: CGFloat = 0.75
-    let edgeBoost: CGFloat = 1.50
+    // Opened up so the two rims spill past the screen edges and the drum
+    // reads as filling the frame rather than sitting inside it. Only the
+    // edge moves — the waist stays put, so the circles at the pinch keep
+    // their spacing and the flare gets deeper rather than the whole tube
+    // getting fatter.
+    let edgeBoost: CGFloat = 1.85
     let rowRadiusFactor = waistFactor + (edgeBoost - waistFactor) * pow(abs(normalizedRow), 2)
     let rowDrumRadius = geo.drumRadius * rowRadiusFactor
 
@@ -326,6 +331,24 @@ struct _5FunnyQR: View {
     /// ring tip above, this one does move circles sideways, so it's paid for
     /// out of the same horizontal budget as the radius.
     private let spineLeanAngle: CGFloat = 12 * .pi / 180
+    /// How hard each end of the spine curls back against that lean. Expressed
+    /// as an angle over the same spine length the lean uses, so the curl and
+    /// the thing it's fighting are always drawn from one budget: change the
+    /// screen, the drum's proportions, or `usableHeight`, and the two move
+    /// together instead of drifting out of step. It has to out-run the lean to
+    /// read as a curl at all, hence the larger angle.
+    private let spineCurlAngle: CGFloat = 23.4 * .pi / 180
+    /// Blows the whole drum up without touching its shape. It multiplies the
+    /// drum's width and its spine length by the same amount, and every other
+    /// sideways term — radius, spine lean, bow, curl, circle size — is already
+    /// measured off one of those two, so they all follow in step and the
+    /// silhouette comes out identical, just larger.
+    ///
+    /// Past about 1.12 the widest rings start running off the sides. That is
+    /// unavoidable rather than a mistake: the silhouette is proportionally
+    /// wider than the screen is, so filling the height at all means letting
+    /// the two flared ends bleed past the edges.
+    private static let structureScale: CGFloat = 1.35
 
     /// How long the outermost row's staggered morph takes to catch up.
     private var maxRowDelay: TimeInterval { rowStagger * Double(centerRowIndex) }
@@ -347,7 +370,16 @@ struct _5FunnyQR: View {
             // drum runs off both edges of the screen. At 16° over a 0.62·H
             // spine the sweep is about 0.14·W each way, which is what the
             // radius here has been cut back to pay for.
-            let usableWidth = geo.size.width * 0.44
+            // Trimmed a little past what the lean alone needs, because the
+            // spine's S-curl throws the two rims further sideways still — and
+            // they're the widest rings on the drum, so they're what reaches the
+            // screen edge first. The radius pays for that headroom.
+            let usableWidth = geo.size.width * 0.405 * Self.structureScale
+
+            // Hoisted out of the context below so the spine's sideways terms
+            // can be measured against the same span the lean is.
+            let usableHeight = geo.size.height * 0.62 * Self.structureScale
+            let halfSpine = usableHeight / 2
 
             let geoContext = QRGeometryContext(
                 gridSize: Self.gridSize,
@@ -356,19 +388,25 @@ struct _5FunnyQR: View {
                 side: side,
                 cell: side / CGFloat(Self.gridSize),
                 center: CGPoint(x: geo.size.width / 2, y: geo.size.height / 2),
-                usableHeight: geo.size.height * 0.62,
+                usableHeight: usableHeight,
                 drumRadius: usableWidth / 2,
                 cylinderTiltAngle: cylinderTiltAngle,
                 cylRows: Self.cylRows,
                 cylCols: Self.cylCols,
                 helixTwist: 0.5,
                 spineLeanAngle: spineLeanAngle,
-                // The bow is dialled well back from what it was: it pulls the
-                // middle left, which is the same direction the top half's curl
-                // is trying to travel, so at its old strength it swallowed the
-                // curl and the top end came out nearly straight.
-                spineBow: geo.size.width * 0.025,
-                spineSCurl: geo.size.width * 0.15,
+                // Both of these used to be cut from the screen's *width*, while
+                // the lean they work against is cut from its height — so on a
+                // shorter, narrower phone they drifted out of proportion and
+                // the rims crowded the edge. All three sideways terms now come
+                // off the same spine length.
+                //
+                // The bow is also dialled well back from what it was: it pulls
+                // the middle left, which is the same direction the top half's
+                // curl is trying to travel, so at its old strength it swallowed
+                // the curl and the top end came out nearly straight.
+                spineBow: halfSpine * 0.0415,
+                spineSCurl: halfSpine * tan(spineCurlAngle),
                 spineSCurlExponent: 3
             )
             // Size the drum's circles off its own column spacing, not the
