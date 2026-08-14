@@ -143,6 +143,14 @@ private struct QRGeometryContext {
     /// How far the spine bows left of dead straight at its midpoint, so it
     /// traces a curve rather than a ruler-straight diagonal.
     let spineBow: CGFloat
+    /// How far each end of the spine curls back *against* the lean, turning
+    /// the single diagonal into an S: the top swings on toward the top-left
+    /// and the bottom toward the bottom-right.
+    let spineSCurl: CGFloat
+    /// How tightly that curl is packed into the two ends. Higher keeps the
+    /// middle of the spine on its original diagonal and confines the counter-
+    /// curve to the last stretch at each rim.
+    let spineSCurlExponent: CGFloat
 }
 
 /// Timing constants for the current animation frame.
@@ -227,11 +235,22 @@ private func layoutFor(
     let spineSweep = -normalizedRow * (geo.usableHeight / 2) * tan(geo.spineLeanAngle)
     let spineCurve = -geo.spineBow * (1 - normalizedRow * normalizedRow)
 
+    // Then curl each end back the other way, so the spine reads as an S
+    // instead of one straight lean: the top rim carries on past upright into
+    // the top-left, the bottom rim into the bottom-right. The odd power is
+    // what makes it a curl and not just a weaker lean — through the middle
+    // rows it contributes almost nothing, so the diagonal survives there
+    // intact, and it only takes hold over the last stretch before each rim.
+    // Sign is applied by hand rather than by feeding a negative base to
+    // `pow`, which keeps the exponent free to be non-integral.
+    let curlMagnitude = pow(abs(normalizedRow), geo.spineSCurlExponent)
+    let spineCurl = geo.spineSCurl * curlMagnitude * (normalizedRow < 0 ? -1 : 1)
+
     // Slope the rows themselves on top of that. This is a shear, not a
     // rotation: it tips each ring by the angle without moving any circle
     // sideways, so it costs vertical space only and leaves the whole
     // horizontal budget to the radius and the spine sweep.
-    let tiltedX = localX + spineSweep + spineCurve
+    let tiltedX = localX + spineSweep + spineCurve + spineCurl
     let tiltedY = localY + localX * tan(geo.cylinderTiltAngle)
 
     let cylinderPoint = CGPoint(
@@ -344,7 +363,13 @@ struct _5FunnyQR: View {
                 cylCols: Self.cylCols,
                 helixTwist: 0.5,
                 spineLeanAngle: spineLeanAngle,
-                spineBow: geo.size.width * 0.05
+                // The bow is dialled well back from what it was: it pulls the
+                // middle left, which is the same direction the top half's curl
+                // is trying to travel, so at its old strength it swallowed the
+                // curl and the top end came out nearly straight.
+                spineBow: geo.size.width * 0.025,
+                spineSCurl: geo.size.width * 0.15,
+                spineSCurlExponent: 3
             )
             // Size the drum's circles off its own column spacing, not the
             // QR's, so they sit apart cleanly at the front of the drum. The
