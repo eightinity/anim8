@@ -19,6 +19,13 @@ private struct QRDot: Identifiable {
     /// numbering instead, and only the first `cylRows * cylCols` dots land
     /// on it at all.
     let cylIndex: Int
+    /// How far out from the middle of the QR this dot sits, 0 at the very
+    /// centre and 1 out at the farthest corner. This is the pinch point: the
+    /// grid is treated like a square of cloth caught in the middle and lifted,
+    /// and this fraction is what orders the dots as the lift travels outward.
+    /// Straight-line distance, not row distance — a pinch spreads as a ring,
+    /// so a dot off to the side is as "late" as one directly below.
+    let pinchFraction: Double
 }
 
 private func makeFunnyQRDots(gridSize: Int) -> [QRDot] {
@@ -46,6 +53,11 @@ private func makeFunnyQRDots(gridSize: Int) -> [QRDot] {
     let lightBlue = Color(red: 0.68, green: 0.79, blue: 0.94)
     let midBlue = Color(red: 0.42, green: 0.56, blue: 0.86)
     let darkBlue = Color(red: 0.20, green: 0.32, blue: 0.66)
+
+    // The pinch point, and the distance from it out to a corner — the longest
+    // any dot has to wait for the lift to reach it.
+    let midpoint = Double(gridSize - 1) / 2
+    let cornerDistance = (midpoint * midpoint * 2).squareRoot()
 
     var dots: [QRDot] = []
     for r in 0..<gridSize {
@@ -75,7 +87,17 @@ private func makeFunnyQRDots(gridSize: Int) -> [QRDot] {
             // formed, so the flat code still reads as a plain QR.
             let avatarImageName = hash2 % 2 == 0 ? "AvatarFemale" : "AvatarMale"
 
-            dots.append(QRDot(row: r, col: c, color: color, avatarImageName: avatarImageName, cylIndex: 0))
+            let dr = Double(r) - midpoint, dc = Double(c) - midpoint
+            let pinchFraction = min(1, (dr * dr + dc * dc).squareRoot() / cornerDistance)
+
+            dots.append(QRDot(
+                row: r,
+                col: c,
+                color: color,
+                avatarImageName: avatarImageName,
+                cylIndex: 0,
+                pinchFraction: pinchFraction
+            ))
         }
     }
 
@@ -96,7 +118,8 @@ private func makeFunnyQRDots(gridSize: Int) -> [QRDot] {
             col: d.col,
             color: d.color,
             avatarImageName: d.avatarImageName,
-            cylIndex: slot
+            cylIndex: slot,
+            pinchFraction: d.pinchFraction
         )
     }
     return dots
@@ -121,8 +144,6 @@ private func easeOutCubic(_ x: CGFloat) -> CGFloat {
 /// `GeometryReader` pass instead of per dot.
 private struct QRGeometryContext {
     let gridSize: Int
-    let centerRowIndex: Int
-    let centerRow: CGFloat
     let side: CGFloat
     let cell: CGFloat
     let center: CGPoint
@@ -159,7 +180,10 @@ private struct QRAnimationContext {
     let angleOffset: CGFloat
     let tFlatEnd: TimeInterval
     let tHoldEnd: TimeInterval
-    let rowStagger: TimeInterval
+    /// The full spread between the first dot to move and the last. Both the
+    /// lift and the settle use the whole of it — they just hand it out in
+    /// opposite order.
+    let maxStagger: TimeInterval
     let morphDuration: TimeInterval
     let baseCircleSize: CGFloat
 }
@@ -273,15 +297,23 @@ private func layoutFor(
     let flatSize = geo.cell * 0.48
     let expandedSize = anim.baseCircleSize
 
-    let rowDelay = Double(abs(dot.row - geo.centerRowIndex)) * anim.rowStagger
+    // Pinch the cloth in the middle and lift: the centre comes away first and
+    // the lift travels outward, so a dot's wait is its distance from the pinch.
+    let liftDelay = dot.pinchFraction * anim.maxStagger
+    // Laying it back down runs the other way round. The outer edge is what
+    // reaches the surface first and the pinched centre is the last thing to
+    // drop, so the same spread is handed out in reverse — a dot that led the
+    // lift trails the settle. Sharing one `maxStagger` between the two is what
+    // keeps them mirror images rather than two loosely related sweeps.
+    let settleDelay = (1 - dot.pinchFraction) * anim.maxStagger
 
     // Grow into the cylinder, bouncing slightly as it lands.
-    let forwardLocal = anim.cycleTime - anim.tFlatEnd - rowDelay
+    let forwardLocal = anim.cycleTime - anim.tFlatEnd - liftDelay
     let forwardT = max(0, min(1, forwardLocal / anim.morphDuration))
     let forwardEased = forwardLocal <= 0 ? 0 : easeOutBack(CGFloat(forwardT))
 
     // Collapse back to the flat grid, moving immediately.
-    let backwardLocal = anim.cycleTime - anim.tHoldEnd - rowDelay
+    let backwardLocal = anim.cycleTime - anim.tHoldEnd - settleDelay
     let backwardT = max(0, min(1, backwardLocal / anim.morphDuration))
     let backwardEased = backwardLocal <= 0 ? 0 : easeOutCubic(CGFloat(backwardT))
 
@@ -323,12 +355,18 @@ struct _5FunnyQR: View {
     private static let cylRows = 14
     private static let cylCols = 11
     private let dots = makeFunnyQRDots(gridSize: gridSize)
-    private let centerRowIndex = gridSize / 2
 
     private let flatHold: TimeInterval = 3.0
     private let cylinderHold: TimeInterval = 9.0
-    private let morphDuration: TimeInterval = 1.1
-    private let rowStagger: TimeInterval = 0.02
+    /// How long any one dot takes to make its own trip. Shortened, because the
+    /// stagger below now spreads the dots out in time — leaving this at its old
+    /// length would have every dot still travelling when the last one sets off,
+    /// which reads as a slow blur rather than a wave passing through.
+    private let morphDuration: TimeInterval = 0.9
+    /// Gap between the first dot to move and the last. This used to be a
+    /// per-row 0.02, about 0.2s end to end against a 1.1s trip — far too little
+    /// to see, which is why the grid looked like it moved all at once.
+    private let maxStagger: TimeInterval = 0.8
     /// Radians per second the drum spins while it's expanded (negative = spins left).
     private let rotationSpeed: CGFloat = -.pi / 4
     /// How far each ring is tipped. Applied as a shear, so it costs vertical
@@ -361,9 +399,8 @@ struct _5FunnyQR: View {
     /// the two flared ends bleed past the edges.
     private static let structureScale: CGFloat = 1.35
 
-    /// How long the outermost row's staggered morph takes to catch up.
-    private var maxRowDelay: TimeInterval { rowStagger * Double(centerRowIndex) }
-    private var morphPhase: TimeInterval { morphDuration + maxRowDelay }
+    /// One whole sweep: the last dot's wait plus its own trip.
+    private var morphPhase: TimeInterval { morphDuration + maxStagger }
     private var tFlatEnd: TimeInterval { flatHold }
     private var tForwardEnd: TimeInterval { tFlatEnd + morphPhase }
     private var tHoldEnd: TimeInterval { tForwardEnd + cylinderHold }
@@ -394,8 +431,6 @@ struct _5FunnyQR: View {
 
             let geoContext = QRGeometryContext(
                 gridSize: Self.gridSize,
-                centerRowIndex: centerRowIndex,
-                centerRow: CGFloat(Self.gridSize - 1) / 2,
                 side: side,
                 cell: side / CGFloat(Self.gridSize),
                 center: CGPoint(x: geo.size.width / 2, y: geo.size.height / 2),
@@ -444,7 +479,7 @@ struct _5FunnyQR: View {
                     angleOffset: angleOffset,
                     tFlatEnd: tFlatEnd,
                     tHoldEnd: tHoldEnd,
-                    rowStagger: rowStagger,
+                    maxStagger: maxStagger,
                     morphDuration: morphDuration,
                     baseCircleSize: baseCircleSize
                 )
