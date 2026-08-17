@@ -125,19 +125,17 @@ private func makeFunnyQRDots(gridSize: Int) -> [QRDot] {
     return dots
 }
 
-/// Cubic ease-with-overshoot, used to blend the flat grid into its cylinder
-/// slot with a little spring-like bounce.
-private func easeOutBack(_ x: CGFloat) -> CGFloat {
-    let c1: CGFloat = 1.70158
-    let c3 = c1 + 1
-    let t = x - 1
-    return 1 + c3 * t * t * t + c1 * t * t
-}
-
-/// Ease-out cubic — starts moving immediately (no zero-velocity hesitation),
-/// settles gently with no overshoot. Used to collapse back into the flat grid.
-private func easeOutCubic(_ x: CGFloat) -> CGFloat {
-    1 - pow(1 - x, 3)
+/// Smooth blend from 0 to 1, used for both halves of the morph.
+///
+/// This is the quintic smoothstep, and it is chosen over the more usual cubic
+/// for one reason: it is flat in both its first *and* second derivative at each
+/// end. Velocity starting at zero is what stops a dot looking flicked; the
+/// acceleration also starting at zero is what stops the departure looking like
+/// it was struck. In between it is one continuous swell with no overshoot at
+/// all, so nothing is ever thrown past its target and pulled back.
+private func smoothMorph(_ x: CGFloat) -> CGFloat {
+    let t = min(1, max(0, x))
+    return t * t * t * (t * (t * 6 - 15) + 10)
 }
 
 /// Layout constants that don't change frame to frame, computed once per
@@ -290,7 +288,15 @@ private func layoutFor(
     // Only the front face of the drum is drawn. As a dot rotates past the
     // side it fades right out and stays gone the whole time it's round the
     // back, instead of showing through the front of the cylinder.
-    let frontFade = max(0, min(1, (depth + 0.10) / 0.55))
+    //
+    // The fade is eased rather than a straight ramp, and that is what keeps
+    // the revolution from looking stepped. Depth is a cosine, so its rate of
+    // change per degree of turn is at its greatest right at the silhouette —
+    // exactly where a clamped linear ramp hits its corner. A dot therefore
+    // used to ease in gently and then get chopped off at full speed, twice
+    // per turn, across every dot on the drum. Smoothing the ramp puts a zero
+    // rate at both ends, so a dot arrives and leaves without a catch.
+    let frontFade = smoothMorph((depth + 0.10) / 0.55)
     // Dots with no slot on the drum fade away entirely as it forms.
     let colOpacity = onDrum ? Double(frontFade) : 0
 
@@ -307,15 +313,18 @@ private func layoutFor(
     // keeps them mirror images rather than two loosely related sweeps.
     let settleDelay = (1 - dot.pinchFraction) * anim.maxStagger
 
-    // Grow into the cylinder, bouncing slightly as it lands.
+    // Ease up into the cylinder. Both halves of the morph use the same curve on
+    // purpose — the lift used to overshoot its slot and snap back, and the
+    // collapse used to leave at full speed, which between them are what made the
+    // dots look thrown rather than carried.
     let forwardLocal = anim.cycleTime - anim.tFlatEnd - liftDelay
     let forwardT = max(0, min(1, forwardLocal / anim.morphDuration))
-    let forwardEased = forwardLocal <= 0 ? 0 : easeOutBack(CGFloat(forwardT))
+    let forwardEased = forwardLocal <= 0 ? 0 : smoothMorph(CGFloat(forwardT))
 
-    // Collapse back to the flat grid, moving immediately.
+    // Settle back into the flat grid.
     let backwardLocal = anim.cycleTime - anim.tHoldEnd - settleDelay
     let backwardT = max(0, min(1, backwardLocal / anim.morphDuration))
-    let backwardEased = backwardLocal <= 0 ? 0 : easeOutCubic(CGFloat(backwardT))
+    let backwardEased = backwardLocal <= 0 ? 0 : smoothMorph(CGFloat(backwardT))
 
     let posMix = forwardEased * (1 - backwardEased)
     let mix = min(1, max(0, posMix))
@@ -369,6 +378,11 @@ struct _5FunnyQR: View {
     private let maxStagger: TimeInterval = 0.8
     /// Radians per second the drum spins while it's expanded (negative = spins left).
     private let rotationSpeed: CGFloat = -.pi / 4
+    /// Time constant for the drum getting up to that speed. At 1.2s it is about
+    /// three quarters of the way there by the time the morph finishes, so the
+    /// drum is visibly gathering pace while it forms rather than already flat
+    /// out, and is at full rate well inside the hold.
+    private let spinUpTau: TimeInterval = 1.2
     /// How far each ring is tipped. Applied as a shear, so it costs vertical
     /// space only and never squeezes the flared top and bottom rows.
     /// Kept well clear of the spine's lean below — when the two angles match
@@ -472,7 +486,20 @@ struct _5FunnyQR: View {
                 // collapse finishes the still-spinning angle no longer
                 // matters; nothing snaps or halts along the way.
                 let rotationClock = max(0, cycleTime - tFlatEnd)
-                let angleOffset = CGFloat(rotationClock) * rotationSpeed
+                // The drum winds up to speed instead of switching on at full
+                // tilt. It used to jump from stationary to its whole rate in a
+                // single frame, which meant every dot was morphing into a slot
+                // that was already sweeping sideways at over a screen width a
+                // second out at the rims — the dots arrived, but never arrived
+                // at rest. Ramping the rate as `v = vmax(1 - e^(-t/tau))` lets
+                // the drum gather its spin the way something with mass would.
+                //
+                // What is written here is that ramp's exact integral rather
+                // than the rate itself, so the *angle* is what stays smooth:
+                // continuous, starting at zero rate, and asymptotically back
+                // on the same constant-speed line as before.
+                let spinUp = rotationClock - spinUpTau * (1 - exp(-rotationClock / spinUpTau))
+                let angleOffset = CGFloat(spinUp) * rotationSpeed
 
                 let animContext = QRAnimationContext(
                     cycleTime: cycleTime,
