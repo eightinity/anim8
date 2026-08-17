@@ -345,6 +345,25 @@ private func layoutFor(
     )
 }
 
+/// The four things that happen in one cycle.
+///
+/// Haptics are driven off changes to this rather than off `cycleTime` directly,
+/// and that indirection is the whole trick: the timeline body re-runs sixty
+/// times a second, so a test like `cycleTime >= tFlatEnd` is true on every one
+/// of the hundred-odd frames that follow the lift, not just the first. Reducing
+/// the clock to a phase first means "the phase changed" is the thing being
+/// watched, and that happens exactly once per boundary.
+private enum QRCyclePhase: Equatable {
+    /// The QR is lying flat and readable.
+    case flat
+    /// Dots are peeling off the grid and gathering into the drum.
+    case lifting
+    /// The drum is formed and turning.
+    case spinning
+    /// Dots are dropping back down onto the grid.
+    case settling
+}
+
 struct _5FunnyQR: View {
     /// Backdrop, and the colour the top and bottom scrims fade *from*. One
     /// constant feeds both on purpose: the scrims only read as the drum
@@ -419,6 +438,15 @@ struct _5FunnyQR: View {
     private var tForwardEnd: TimeInterval { tFlatEnd + morphPhase }
     private var tHoldEnd: TimeInterval { tForwardEnd + cylinderHold }
     private var totalCycle: TimeInterval { tHoldEnd + morphPhase }
+
+    /// Whether the cycle taps out its turning points.
+    ///
+    /// Worth knowing what this switches on: there is nothing to tap on this
+    /// screen, so the feedback is not answering a gesture — it fires on its own
+    /// every `totalCycle` seconds for as long as the view is up. That is a
+    /// deliberate choice for an ambient piece and not the usual reason to reach
+    /// for haptics, so it is kept behind one flag rather than being woven in.
+    private let hapticsEnabled = true
 
     @State private var startDate: Date?
 
@@ -511,6 +539,14 @@ struct _5FunnyQR: View {
                     baseCircleSize: baseCircleSize
                 )
 
+                // Same four boundaries the layout already runs off, collapsed
+                // to a single value that only changes at the edges.
+                let phase: QRCyclePhase =
+                    cycleTime < tFlatEnd ? .flat
+                    : cycleTime < tForwardEnd ? .lifting
+                    : cycleTime < tHoldEnd ? .spinning
+                    : .settling
+
                 ZStack {
                     ForEach(dots) { dot in
                         let dotLayout = layoutFor(dot, geo: geoContext, anim: animContext)
@@ -534,6 +570,33 @@ struct _5FunnyQR: View {
                     }
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
+                // Two of the four boundaries are silent on purpose. A tap only
+                // reads as belonging to the picture if there is a moment under
+                // it, and the two morph *ends* are the softest instants in the
+                // cycle by design — the dots arrive on a smoothstep and the
+                // drum is still winding up to speed — so marking them would put
+                // a hard edge exactly where the motion has none.
+                .sensoryFeedback(trigger: phase) { _, phase in
+                    guard hapticsEnabled else { return nil }
+                    switch phase {
+                    case .lifting:
+                        // The grid lets go. Soft and low: the cloth is pinched
+                        // and peeled away, it does not snap.
+                        return .impact(flexibility: .soft, intensity: 0.5)
+                    case .settling:
+                        // The same event running backwards. Lighter than the
+                        // lift, because this wave starts out at the rim where
+                        // the drum is at its sparsest.
+                        return .impact(flexibility: .soft, intensity: 0.35)
+                    case .flat:
+                        // Everything is down and the code is readable again.
+                        // The firmest of the three, and the only one of the
+                        // four boundaries that is genuinely an arrival.
+                        return .impact(flexibility: .solid, intensity: 0.6)
+                    case .spinning:
+                        return nil
+                    }
+                }
             }
         }
         .background(Self.backgroundColor.ignoresSafeArea())
