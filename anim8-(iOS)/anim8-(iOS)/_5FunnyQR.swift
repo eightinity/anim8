@@ -439,16 +439,20 @@ struct _5FunnyQR: View {
     private var tHoldEnd: TimeInterval { tForwardEnd + cylinderHold }
     private var totalCycle: TimeInterval { tHoldEnd + morphPhase }
 
-    /// Whether the cycle taps out its turning points.
-    ///
-    /// Worth knowing what this switches on: there is nothing to tap on this
-    /// screen, so the feedback is not answering a gesture — it fires on its own
-    /// every `totalCycle` seconds for as long as the view is up. That is a
-    /// deliberate choice for an ambient piece and not the usual reason to reach
-    /// for haptics, so it is kept behind one flag rather than being woven in.
+    /// Whether the morph taps out its turning points.
     private let hapticsEnabled = true
 
-    @State private var startDate: Date?
+    /// Which end of the morph the drum is heading for. A tap flips it and
+    /// nothing else does — there is no clock underneath it any more.
+    @State private var isExpanded = false
+    /// When the current expand began. It has two jobs: it is the origin the
+    /// forward morph is measured from, and it is the origin of the spin-up
+    /// ramp. That is why it is stamped on the *expand* tap alone and left
+    /// alone by the collapse — the drum carries on turning all the way down.
+    @State private var expandDate: Date?
+    /// When the current collapse began. `nil` until the first one, which is
+    /// how the opening flat state is told apart from a settled one.
+    @State private var collapseDate: Date?
 
     var body: some View {
         GeometryReader { geo in
@@ -505,15 +509,39 @@ struct _5FunnyQR: View {
             let baseCircleSize = (usableWidth / CGFloat(Self.cylCols)) * 1.65
 
             TimelineView(.animation) { timeline in
-                let elapsed = startDate.map { timeline.date.timeIntervalSince($0) } ?? 0
-                let cycleTime = elapsed.truncatingRemainder(dividingBy: totalCycle)
+                let now = timeline.date
+
+                // Every bit of geometry below still reads off a single
+                // `cycleTime`, exactly as it did when a modulo drove it. All
+                // that changed is where the number comes from: a tap runs it
+                // forward through the lift and parks it at the top, or forward
+                // through the settle and parks it at the end.
+                //
+                // Parking is the whole point. The old clock had to cross the
+                // hold in a fixed nine seconds because it wrapped; clamping
+                // instead is what lets the drum stay up for as long as it is
+                // left alone, without one line of the layout maths below
+                // needing to know that anything changed.
+                let cycleTime: TimeInterval = {
+                    if isExpanded {
+                        let t = expandDate.map { now.timeIntervalSince($0) } ?? 0
+                        return min(tForwardEnd, tFlatEnd + t)
+                    }
+                    guard let collapseDate else { return 0 }
+                    return min(totalCycle, tHoldEnd + now.timeIntervalSince(collapseDate))
+                }()
 
                 // Rotation never stops or freezes — it keeps spinning right
                 // through the backward morph too. Position is a separate
                 // blend (mix) down to the flat grid, so by the time the
                 // collapse finishes the still-spinning angle no longer
                 // matters; nothing snaps or halts along the way.
-                let rotationClock = max(0, cycleTime - tFlatEnd)
+                //
+                // It is timed from the expand tap rather than from `cycleTime`,
+                // because `cycleTime` now stops dead at the top of the lift. A
+                // drum that froze the instant it finished forming would be the
+                // opposite of what is wanted here.
+                let rotationClock = expandDate.map { max(0, now.timeIntervalSince($0)) } ?? 0
                 // The drum winds up to speed instead of switching on at full
                 // tilt. It used to jump from stationary to its whole rate in a
                 // single frame, which meant every dot was morphing into a slot
@@ -539,19 +567,31 @@ struct _5FunnyQR: View {
                     baseCircleSize: baseCircleSize
                 )
 
-                // Same four boundaries the layout already runs off, collapsed
-                // to a single value that only changes at the edges.
+                // The same four phases as before, and still read off the clock
+                // rather than straight off `isExpanded`. That is deliberate: a
+                // tap can tell you a morph has *begun*, but only the clock can
+                // tell you it has finished, and both arrivals are worth having.
                 let phase: QRCyclePhase =
-                    cycleTime < tFlatEnd ? .flat
-                    : cycleTime < tForwardEnd ? .lifting
-                    : cycleTime < tHoldEnd ? .spinning
-                    : .settling
+                    isExpanded
+                    ? (cycleTime < tForwardEnd ? .lifting : .spinning)
+                    : (collapseDate != nil && cycleTime < totalCycle ? .settling : .flat)
 
                 ZStack {
                     ForEach(dots) { dot in
                         let dotLayout = layoutFor(dot, geo: geoContext, anim: animContext)
 
-                        ZStack {
+                        // Bottom-aligned, and clipped by the dot's own circle
+                        // rather than by one of its own. The art is a portrait
+                        // that runs off the foot of its frame — the shoulders
+                        // reach the bottom edge, and the only slack is the
+                        // headroom above the hair. Centring it therefore spent
+                        // the circle's best space on that empty headroom and
+                        // sat the figure adrift in the middle. Dropping it to
+                        // the floor puts the head where the circle is widest
+                        // and lets the shoulders run out of frame the way they
+                        // were drawn to, which is what makes it read as an
+                        // avatar rather than a picture that happens to be round.
+                        ZStack(alignment: .bottom) {
                             Circle()
                                 .fill(dot.color)
                                 .frame(width: dotLayout.size, height: dotLayout.size)
@@ -561,9 +601,9 @@ struct _5FunnyQR: View {
                                     .resizable()
                                     .scaledToFill()
                                     .frame(width: dotLayout.size * 0.82, height: dotLayout.size * 0.82)
-                                    .clipShape(Circle())
                             }
                         }
+                        .clipShape(Circle())
                         .opacity(dotLayout.opacity)
                         .position(dotLayout.position)
                         .zIndex(dotLayout.zIndex)
@@ -634,8 +674,28 @@ struct _5FunnyQR: View {
             .ignoresSafeArea()
             .allowsHitTesting(false)
         }
-        .onAppear {
-            startDate = Date()
+        .contentShape(Rectangle())
+        .onTapGesture {
+            let now = Date()
+            if isExpanded {
+                // A tap is only taken while the drum is all the way up or all
+                // the way down, never part-way through a morph. Reversing
+                // mid-flight would tear: the stagger hands the delays out in
+                // opposite order for the two halves, so the dot leading the
+                // lift is the one trailing the settle, and every dot on the
+                // grid would jump to a different point on its own trip in a
+                // single frame. Waiting the trip out is the cheap way to keep
+                // the wave whole.
+                guard let expandDate,
+                      now.timeIntervalSince(expandDate) >= morphPhase else { return }
+                collapseDate = now
+                isExpanded = false
+            } else {
+                if let collapseDate,
+                   now.timeIntervalSince(collapseDate) < morphPhase { return }
+                expandDate = now
+                isExpanded = true
+            }
         }
     }
 }
