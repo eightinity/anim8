@@ -610,12 +610,18 @@ struct _5FunnyQR: View {
                     }
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
-                // Two of the four boundaries are silent on purpose. A tap only
-                // reads as belonging to the picture if there is a moment under
-                // it, and the two morph *ends* are the softest instants in the
-                // cycle by design — the dots arrive on a smoothstep and the
-                // drum is still winding up to speed — so marking them would put
-                // a hard edge exactly where the motion has none.
+                // Three of the four phases speak. Two of them now land on the
+                // tap itself, which is the ordinary reason to reach for
+                // haptics — they answer the finger rather than announcing
+                // themselves. The third comes 1.7s after the collapse tap and
+                // is not a tap response at all: it marks the arrival, the
+                // instant the code finishes reassembling and is readable.
+                //
+                // `.spinning` is the one that stays silent, and deliberately.
+                // It is the far end of the lift, which is by design the softest
+                // instant in the whole piece — the dots land on a smoothstep
+                // and the drum is still gathering pace on its spin-up ramp — so
+                // marking it would put a hard edge where the motion has none.
                 .sensoryFeedback(trigger: phase) { _, phase in
                     guard hapticsEnabled else { return nil }
                     switch phase {
