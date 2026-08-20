@@ -1,6 +1,6 @@
 //
-//  _5FunnyQR.swift
-//  anim8-(iOS)
+//  FunnyQR.swift
+//  anim8
 //
 //  Created by Gunjan Haldar   on 23/07/26.
 //
@@ -364,7 +364,7 @@ private enum QRCyclePhase: Equatable {
     case settling
 }
 
-struct _5FunnyQR: View {
+struct FunnyQR: View {
     /// Backdrop, and the colour the top and bottom scrims fade *from*. One
     /// constant feeds both on purpose: the scrims only read as the drum
     /// dissolving into nothing if they land on exactly the page colour, and
@@ -707,5 +707,5 @@ struct _5FunnyQR: View {
 }
 
 #Preview {
-    _5FunnyQR()
+    FunnyQR()
 }

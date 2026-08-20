@@ -1,6 +1,6 @@
 //
 //  MoviePosterSwipeCarousel.swift
-//  legendary-Animo
+//  anim8
 //
 //  Swipe-to-browse movie poster carousel — "flipping through cinema posters."
 //  Velocity-aware paging, fanned card-stack with depth, cross-fading immersive

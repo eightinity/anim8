@@ -1,13 +1,13 @@
 //
-//  _3CrossButtonWithVariousIcons.swift
-//  Eightinity Animations
+//  CrossButtonWithVariousIcons.swift
+//  anim8
 //
 //  Created by Gunjan Haider on 26/09/25.
 //
 
 import SwiftUI
 
-struct _1CrossButtonWithVariousIcons: View {
+struct CrossButtonWithVariousIcons: View {
     
     @State var animate: Bool = false
     @State var opacity: Bool = true
@@ -95,5 +95,5 @@ struct _1CrossButtonWithVariousIcons: View {
 }
 
 #Preview {
-    _1CrossButtonWithVariousIcons()
+    CrossButtonWithVariousIcons()
 }

@@ -1,6 +1,6 @@
 //
 //  NowPlayingView.swift
-//  Animation
+//  anim8
 //
 //  Static recreation of the "Now Playing" movie screen. Built on Apple APIs — the
 //  chips/buttons use the native `.glassEffect()` modifier and the bottom bar is a
@@ -184,8 +184,6 @@ private struct NowPlayingScreen: View {
             .background(
                 RoundedRectangle(cornerRadius: 26, style: .continuous).fill(.black)
             )
-         
-    
             // Two rectangles (behind) filling the bottom-corner notches into the card
             .background(alignment: .bottomLeading) {
                 Rectangle().fill(.black).frame(width: 70, height: 70).offset(y: 35)
@@ -198,6 +196,7 @@ private struct NowPlayingScreen: View {
 
     private var tomorrowButton: some View {
         Button {
+            // no-op (visual only)
         } label: {
             HStack(spacing: 5) {
                 Text("Tomorrow")
