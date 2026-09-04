@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "swiftui-microinteractions": {
+      "source": "iAmVishal16/swiftui-microinteractions",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "2116d5db2abad44f282618255ffdca2eb6e92c59ba094ff03cc7d93fc260df8d"
+    }
+  }
+}
