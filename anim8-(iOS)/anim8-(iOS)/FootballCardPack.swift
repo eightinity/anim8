@@ -270,6 +270,7 @@ private struct StatRingView: View {
     let color: Color
     let animate: Bool
     var delay: Double = 0
+    var theme: PackTheme = .dark
 
     @State private var fillAmount: CGFloat = 0
     @State private var displayedValue: Int = 0
@@ -289,14 +290,14 @@ private struct StatRingView: View {
                     .rotationEffect(.degrees(-90))
                 Text("\(displayedValue)")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(theme.textPrimary)
                     .contentTransition(.numericText(countsDown: false))
                     .animation(.spring(response: 0.3, dampingFraction: 0.8), value: displayedValue)
             }
             Text(label)
                 .font(.system(size: 10, weight: .bold))
                 .tracking(1)
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(theme.textSecondary)
         }
         .scaleEffect(animate ? 1 : 0.3)
         .opacity(animate ? 1 : 0)
@@ -339,18 +340,19 @@ private struct StatRingView: View {
 private struct StatsRowView: View {
     let card: PlayerCard
     let animate: Bool
+    var theme: PackTheme = .dark
 
     var body: some View {
         HStack(spacing: 0) {
-            StatRingView(label: "PAC", value: card.pace, color: .green, animate: animate, delay: 0.0)
+            StatRingView(label: "PAC", value: card.pace, color: .green, animate: animate, delay: 0.0, theme: theme)
             Spacer()
-            StatRingView(label: "SHO", value: card.shooting, color: .orange, animate: animate, delay: 0.08)
+            StatRingView(label: "SHO", value: card.shooting, color: .orange, animate: animate, delay: 0.08, theme: theme)
             Spacer()
-            StatRingView(label: "PAS", value: card.passing, color: .blue, animate: animate, delay: 0.16)
+            StatRingView(label: "PAS", value: card.passing, color: .blue, animate: animate, delay: 0.16, theme: theme)
             Spacer()
-            StatRingView(label: "DEF", value: card.defending, color: .red, animate: animate, delay: 0.24)
+            StatRingView(label: "DEF", value: card.defending, color: .red, animate: animate, delay: 0.24, theme: theme)
             Spacer()
-            StatRingView(label: "OVR", value: card.overall, color: card.tier.color, animate: animate, delay: 0.32)
+            StatRingView(label: "OVR", value: card.overall, color: card.tier.color, animate: animate, delay: 0.32, theme: theme)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 16)
@@ -367,6 +369,7 @@ private struct SealedPackView: View {
     @Binding var tearProgress: CGFloat
     @Binding var shimmerOffset: CGFloat
     var packShake: CGFloat
+    var theme: PackTheme
     var onTearComplete: () -> Void
     var onTearCancel: () -> Void
     var onTearing: (CGFloat) -> Void
@@ -389,20 +392,18 @@ private struct SealedPackView: View {
             Text("ULTIMATE PACK")
                 .font(.system(size: 13, weight: .bold))
                 .tracking(4)
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(theme.textSecondary)
 
             Text("Football Stars")
                 .font(.system(size: 32, weight: .heavy))
                 .foregroundStyle(
                     LinearGradient(
-                        colors: [goldColor, .white],
+                        colors: [goldColor, theme.textPrimary],
                         startPoint: .leading,
                         endPoint: .trailing
                     )
                 )
         }
-        .opacity(appeared ? 1 : 0)
-        .offset(y: appeared ? 0 : -20)
     }
 
     private var packBody: some View {
@@ -413,8 +414,6 @@ private struct SealedPackView: View {
             tearOverlay
         }
         .rotationEffect(.degrees(Double(packShake)))
-        .scaleEffect(appeared ? 1 : 0.8)
-        .opacity(appeared ? 1 : 0)
         .gesture(tearGesture)
     }
 
@@ -422,10 +421,7 @@ private struct SealedPackView: View {
         RoundedRectangle(cornerRadius: 20, style: .continuous)
             .fill(
                 LinearGradient(
-                    colors: [
-                        Color(red: 0.15, green: 0.12, blue: 0.30),
-                        Color(red: 0.08, green: 0.06, blue: 0.18)
-                    ],
+                    colors: [theme.cardBg1, theme.cardBg2],
                     startPoint: .top,
                     endPoint: .bottom
                 )
@@ -465,7 +461,7 @@ private struct SealedPackView: View {
             Text("8 PLAYERS")
                 .font(.system(size: 18, weight: .heavy))
                 .tracking(3)
-                .foregroundStyle(.white)
+                .foregroundStyle(theme.textPrimary)
 
             Text("3 GOLD GUARANTEED")
                 .font(.system(size: 11, weight: .bold))
@@ -537,9 +533,8 @@ private struct SealedPackView: View {
         DragGesture(minimumDistance: 10)
             .onChanged { v in
                 let pull = -v.translation.height
-                if pull > 10 {
-                    onTearing(min(1, pull / 250))
-                }
+                let progress = max(0, min(1, pull / 250))
+                onTearing(progress)
             }
             .onEnded { _ in
                 if tearProgress > 0.7 {
@@ -557,9 +552,8 @@ private struct SealedPackView: View {
             Text("Swipe up to open")
                 .font(.system(size: 14, weight: .medium))
         }
-        .foregroundStyle(.white.opacity(0.4))
-        .opacity(phase == .sealed && appeared ? 1 : 0)
-        .offset(y: appeared ? 0 : 10)
+        .foregroundStyle(theme.textSecondary)
+        .opacity(phase == .sealed ? 1 : 0)
     }
 }
 
@@ -577,6 +571,7 @@ private struct CardRevealView: View {
     let cardH: CGFloat
     let cardRotation: Double
     let showingNextPlayer: Bool
+    var theme: PackTheme
     var onNext: () -> Void
     var onViewAll: () -> Void
 
@@ -600,16 +595,16 @@ private struct CardRevealView: View {
         HStack {
             Text("\(cardIndex + 1) / \(totalCards)")
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(theme.textSecondary)
                 .tracking(2)
             Spacer()
             Text(displayedCard.tier.rawValue)
                 .font(.system(size: 12, weight: .heavy))
                 .tracking(3)
-                .foregroundStyle(displayedCard.tier.color)
+                .foregroundStyle(theme.scheme == .dark ? displayedCard.tier.color : .white)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 5)
-                .background(displayedCard.tier.color.opacity(0.15), in: .capsule)
+                .background(displayedCard.tier.color.opacity(theme.scheme == .dark ? 0.15 : 0.9), in: .capsule)
         }
         .padding(.horizontal, 28)
         .padding(.top, 16)
@@ -649,7 +644,7 @@ private struct CardRevealView: View {
     @ViewBuilder
     private var statsSection: some View {
         if showStats {
-            StatsRowView(card: card, animate: showStats)
+            StatsRowView(card: card, animate: showStats, theme: theme)
                 .padding(.horizontal, 28)
                 .transition(
                     .asymmetric(
@@ -682,11 +677,14 @@ private struct CardRevealView: View {
     }
 
     private var nextButton: some View {
-        Pressed3DButton(
+        let btnColor: Color = theme.scheme == .dark
+            ? .white
+            : Color(red: 0.15, green: 0.15, blue: 0.22)
+        return Pressed3DButton(
             label: "Next Card",
             icon: "arrow.right",
-            baseColor: Color.white,
-            textColor: .black,
+            baseColor: btnColor,
+            isDark: theme.scheme == .dark,
             action: onNext
         )
     }
@@ -697,7 +695,7 @@ private struct CardRevealView: View {
             icon: "rectangle.stack.fill",
             iconLeading: true,
             baseColor: Color(red: 1, green: 0.84, blue: 0),
-            textColor: .black,
+            isDark: theme.scheme == .dark,
             action: onViewAll
         )
     }
@@ -710,7 +708,7 @@ private struct Pressed3DButton: View {
     var icon: String = "arrow.right"
     var iconLeading: Bool = false
     var baseColor: Color = .white
-    var textColor: Color = .black
+    var isDark: Bool = true
     var action: () -> Void
 
     @State private var isPressed = false
@@ -718,23 +716,31 @@ private struct Pressed3DButton: View {
     @State private var arrowNudge: CGFloat = 0
     @State private var glowPulse: CGFloat = 0.4
 
+    private let depth: CGFloat = 5
+
     var body: some View {
-        buttonContent
-            .simultaneousGesture(pressGesture)
-            .onAppear { startAnimations() }
+        Group {
+            if isDark {
+                darkButton
+            } else {
+                lightButton
+            }
+        }
+        .simultaneousGesture(pressGesture)
+        .onAppear { startAnimations() }
     }
 
-    private var buttonContent: some View {
+    // MARK: Dark mode — glass outline button
+
+    private var darkButton: some View {
         Button(action: {}) {
             ZStack {
-                // Outer glow
                 Capsule()
                     .fill(baseColor.opacity(glowPulse * 0.3))
                     .blur(radius: 16)
                     .frame(maxWidth: .infinity)
                     .frame(height: 58)
 
-                // Animated gradient border
                 Capsule()
                     .strokeBorder(
                         AngularGradient(
@@ -753,14 +759,10 @@ private struct Pressed3DButton: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 56)
 
-                // Glass fill
                 Capsule()
                     .fill(
                         LinearGradient(
-                            colors: [
-                                baseColor.opacity(0.15),
-                                baseColor.opacity(0.05)
-                            ],
+                            colors: [baseColor.opacity(0.15), baseColor.opacity(0.05)],
                             startPoint: .top,
                             endPoint: .bottom
                         )
@@ -769,8 +771,7 @@ private struct Pressed3DButton: View {
                     .frame(height: 54)
                     .padding(.horizontal, 1)
 
-                // Label
-                buttonLabel
+                buttonLabel(color: baseColor)
             }
         }
         .buttonStyle(.plain)
@@ -778,24 +779,74 @@ private struct Pressed3DButton: View {
         .animation(.spring(response: 0.25, dampingFraction: 0.6), value: isPressed)
     }
 
-    private var buttonLabel: some View {
+    // MARK: Light mode — solid 3D raised button
+
+    private var lightButton: some View {
+        Button(action: {}) {
+            ZStack {
+                // Bottom edge (3D depth)
+                Capsule()
+                    .fill(baseColor.opacity(0.6))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .offset(y: depth)
+
+                // Main face
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [baseColor, baseColor.opacity(0.85)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                    .overlay(
+                        // Spinning border shimmer (same as dark mode)
+                        Capsule()
+                            .strokeBorder(
+                                AngularGradient(
+                                    colors: [
+                                        .white.opacity(0.7),
+                                        .white.opacity(0.1),
+                                        .white.opacity(0.5),
+                                        .white.opacity(0.05),
+                                        .white.opacity(0.7)
+                                    ],
+                                    center: .center,
+                                    angle: .degrees(Double(borderPhase) * 360)
+                                ),
+                                lineWidth: 2
+                            )
+                    )
+                    .shadow(color: baseColor.opacity(0.3), radius: isPressed ? 2 : 10, x: 0, y: isPressed ? 1 : 5)
+                    .offset(y: isPressed ? depth - 1 : 0)
+
+                buttonLabel(color: .white)
+                    .offset(y: isPressed ? depth - 1 : 0)
+            }
+        }
+        .buttonStyle(.plain)
+        .animation(.spring(response: 0.2, dampingFraction: 0.6), value: isPressed)
+    }
+
+    private func buttonLabel(color: Color) -> some View {
         HStack(spacing: 10) {
             if iconLeading {
                 Image(systemName: icon)
                     .font(.system(size: 15, weight: .bold))
             }
-
             Text(label)
                 .font(.system(size: 16, weight: .heavy))
                 .tracking(1)
-
             if !iconLeading {
                 Image(systemName: icon)
                     .font(.system(size: 15, weight: .bold))
                     .offset(x: arrowNudge)
             }
         }
-        .foregroundStyle(baseColor)
+        .foregroundStyle(color)
         .frame(maxWidth: .infinity)
         .frame(height: 54)
     }
@@ -816,17 +867,14 @@ private struct Pressed3DButton: View {
     }
 
     private func startAnimations() {
-        // Spinning border
         withAnimation(.linear(duration: 3).repeatForever(autoreverses: false)) {
             borderPhase = 1
         }
-        // Arrow nudge
         if !iconLeading {
             withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
                 arrowNudge = 6
             }
         }
-        // Glow pulse
         withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
             glowPulse = 1.0
         }
@@ -841,6 +889,7 @@ private struct CardBrowserView: View {
     let cardW: CGFloat
     let cardH: CGFloat
     let shimmerOffset: CGFloat
+    var theme: PackTheme
     var onNewPack: () -> Void
 
     @State private var dragOffset: CGFloat = 0
@@ -866,13 +915,13 @@ private struct CardBrowserView: View {
                     Text("New Pack")
                         .font(.system(size: 14, weight: .semibold))
                 }
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(theme.textSecondary)
             }
             Spacer()
             Text("YOUR CARDS")
                 .font(.system(size: 13, weight: .bold))
                 .tracking(3)
-                .foregroundStyle(.white.opacity(0.5))
+                .foregroundStyle(theme.textSecondary)
         }
         .padding(.horizontal, 24)
         .padding(.top, 16)
@@ -924,22 +973,22 @@ private struct CardBrowserView: View {
         return VStack(spacing: 8) {
             Text(card.name.uppercased())
                 .font(.system(size: 22, weight: .black))
-                .foregroundStyle(.white)
+                .foregroundStyle(theme.textPrimary)
                 .contentTransition(.opacity)
                 .id(card.id)
 
             HStack(spacing: 10) {
                 Text(card.country)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.6))
-                Circle().fill(.white.opacity(0.3)).frame(width: 3, height: 3)
+                    .foregroundStyle(theme.textSecondary)
+                Circle().fill(theme.textSecondary).frame(width: 3, height: 3)
                 Text(card.position)
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(card.tier.color)
-                Circle().fill(.white.opacity(0.3)).frame(width: 3, height: 3)
+                Circle().fill(theme.textSecondary).frame(width: 3, height: 3)
                 Text("OVR \(card.overall)")
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.8))
+                    .foregroundStyle(theme.textPrimary.opacity(0.8))
             }
         }
         .animation(.easeInOut(duration: 0.3), value: currentIndex)
@@ -953,7 +1002,7 @@ private struct CardBrowserView: View {
                 let isActive = i == currentIndex
                 ZStack {
                     Circle()
-                        .fill(.white.opacity(0.25))
+                        .fill(theme.textSecondary.opacity(0.4))
                         .frame(width: 8, height: 8)
 
                     if isActive {
@@ -1019,9 +1068,47 @@ private func makePackParticles() -> [PackParticle] {
 
 private let packParticles: [PackParticle] = makePackParticles()
 
+// MARK: - Theme
+
+struct PackTheme {
+    let bg: Color
+    let cardBg1: Color
+    let cardBg2: Color
+    let textPrimary: Color
+    let textSecondary: Color
+    let particleColor: Color
+    let borderOpacity: Double
+    let scheme: ColorScheme
+
+    static let dark = PackTheme(
+        bg: Color(red: 0.06, green: 0.06, blue: 0.12),
+        cardBg1: Color(red: 0.15, green: 0.12, blue: 0.30),
+        cardBg2: Color(red: 0.08, green: 0.06, blue: 0.18),
+        textPrimary: .white,
+        textSecondary: .white.opacity(0.5),
+        particleColor: .white,
+        borderOpacity: 0.6,
+        scheme: .dark
+    )
+
+    static let light = PackTheme(
+        bg: Color(red: 0.94, green: 0.94, blue: 0.96),
+        cardBg1: Color(red: 0.85, green: 0.83, blue: 0.92),
+        cardBg2: Color(red: 0.78, green: 0.76, blue: 0.86),
+        textPrimary: Color(red: 0.1, green: 0.1, blue: 0.15),
+        textSecondary: Color(red: 0.1, green: 0.1, blue: 0.15).opacity(0.5),
+        particleColor: Color(red: 0.3, green: 0.3, blue: 0.4),
+        borderOpacity: 0.8,
+        scheme: .light
+    )
+}
+
 // MARK: - Main View
 
 struct FootballCardPack: View {
+    var darkMode: Bool = true
+
+    private var theme: PackTheme { darkMode ? .dark : .light }
 
     @State private var phase: PackPhase = .sealed
     @State private var tearProgress: CGFloat = 0
@@ -1041,11 +1128,9 @@ struct FootballCardPack: View {
         case browsing
     }
 
-    private static let bgColor = Color(red: 0.06, green: 0.06, blue: 0.12)
-
     var body: some View {
         ZStack {
-            Self.bgColor.ignoresSafeArea()
+            theme.bg.ignoresSafeArea()
             GeometryReader { geo in
                 ZStack {
                     ambientGlow(geo: geo)
@@ -1054,7 +1139,7 @@ struct FootballCardPack: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(theme.scheme)
         .onAppear {
             withAnimation(.spring(response: 0.8, dampingFraction: 0.7).delay(0.15)) {
                 appeared = true
@@ -1081,7 +1166,7 @@ struct FootballCardPack: View {
     private var particlesLayer: some View {
         ForEach(packParticles) { p in
             Circle()
-                .fill(.white.opacity(p.opacity))
+                .fill(theme.particleColor.opacity(p.opacity))
                 .frame(width: p.size)
                 .offset(x: p.x, y: p.y)
                 .blur(radius: 1)
@@ -1098,6 +1183,7 @@ struct FootballCardPack: View {
                 tearProgress: $tearProgress,
                 shimmerOffset: $shimmerOffset,
                 packShake: packShake,
+                theme: theme,
                 onTearComplete: handleTearComplete,
                 onTearCancel: handleTearCancel,
                 onTearing: handleTearing
@@ -1116,6 +1202,7 @@ struct FootballCardPack: View {
                 cardH: min(geo.size.width - 48, 340) * 1.5,
                 cardRotation: cardRotation,
                 showingNextPlayer: showingNextPlayer,
+                theme: theme,
                 onNext: nextCard,
                 onViewAll: viewAllCards
             )
@@ -1126,6 +1213,7 @@ struct FootballCardPack: View {
                 cardW: min(geo.size.width - 60, 320),
                 cardH: min(geo.size.width - 60, 320) * 1.5,
                 shimmerOffset: shimmerOffset,
+                theme: theme,
                 onNewPack: resetToSealed
             )
         }
@@ -1134,8 +1222,8 @@ struct FootballCardPack: View {
     // MARK: - Actions
 
     private func handleTearing(_ progress: CGFloat) {
-        phase = .tearing
         tearProgress = progress
+        phase = progress > 0.01 ? .tearing : .sealed
     }
 
     private func handleTearComplete() {
@@ -1266,6 +1354,10 @@ struct FootballCardPack: View {
 
 // MARK: - Preview
 
-#Preview {
-    FootballCardPack()
+#Preview("Dark") {
+    FootballCardPack(darkMode: true)
+}
+
+#Preview("Light") {
+    FootballCardPack(darkMode: false)
 }
