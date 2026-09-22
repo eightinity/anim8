@@ -9,7 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        CoffeeAppFlow()
+        GalleryDetailView(items: GalleryItem.sampleItems, startIndex: 5)
     }
 }
 
